@@ -128,6 +128,12 @@ Composition/Decoration Kernels
 Specialty Kernels
 -----------------------------------
 
+:hidden:`ArcKernel`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ArcKernel
+   :members:
+
 :hidden:`IndexKernel`
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -172,4 +178,10 @@ Kernels for Scalable GP Regression Methods
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: InducingPointKernel
+   :members:
+
+:hidden:`RFFKernel`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: RFFKernel
    :members:

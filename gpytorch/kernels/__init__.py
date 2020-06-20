@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from . import keops
 from .additive_structure_kernel import AdditiveStructureKernel
+from .arc_kernel import ArcKernel
 from .cosine_kernel import CosineKernel
 from .cylindrical_kernel import CylindricalKernel
 from .grid_interpolation_kernel import GridInterpolationKernel
@@ -20,6 +21,7 @@ from .polynomial_kernel_grad import PolynomialKernelGrad
 from .product_structure_kernel import ProductStructureKernel
 from .rbf_kernel import RBFKernel
 from .rbf_kernel_grad import RBFKernelGrad
+from .rff_kernel import RFFKernel
 from .rq_kernel import RQKernel
 from .scale_kernel import ScaleKernel
 from .spectral_mixture_kernel import SpectralMixtureKernel
@@ -27,6 +29,7 @@ from .spectral_mixture_kernel import SpectralMixtureKernel
 __all__ = [
     "keops",
     "Kernel",
+    "ArcKernel",
     "AdditiveKernel",
     "AdditiveStructureKernel",
     "CylindricalKernel",
@@ -47,6 +50,7 @@ __all__ = [
     "ProductKernel",
     "ProductStructureKernel",
     "RBFKernel",
+    "RFFKernel",
     "RBFKernelGrad",
     "RQKernel",
     "ScaleKernel",
