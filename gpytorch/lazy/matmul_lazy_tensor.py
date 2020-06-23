@@ -2,7 +2,7 @@
 
 import torch
 
-from ..utils.broadcasting import _matmul_broadcast_shape, _pad_with_singletons
+from ..utils.broadcasting import _matmul_broadcast_shape, _mul_broadcast_shape, _pad_with_singletons
 from ..utils.getitem import _noop_index
 from ..utils.memoize import cached
 from .diag_lazy_tensor import DiagLazyTensor
@@ -24,8 +24,15 @@ class MatmulLazyTensor(LazyTensor):
         right_lazy_tensor = lazify(right_lazy_tensor)
 
         super().__init__(left_lazy_tensor, right_lazy_tensor)
-        self.left_lazy_tensor = left_lazy_tensor
-        self.right_lazy_tensor = right_lazy_tensor
+        batch_shape = _mul_broadcast_shape(left_lazy_tensor.batch_shape, right_lazy_tensor.batch_shape)
+        if left_lazy_tensor.batch_shape != batch_shape:
+            self.left_lazy_tensor = left_lazy_tensor._expand_batch(batch_shape)
+        else:
+            self.left_lazy_tensor = left_lazy_tensor
+        if right_lazy_tensor.batch_shape != batch_shape:
+            self.right_lazy_tensor = right_lazy_tensor._expand_batch(batch_shape)
+        else:
+            self.right_lazy_tensor = right_lazy_tensor
 
     def _expand_batch(self, batch_shape):
         return self.__class__(
@@ -39,8 +46,12 @@ class MatmulLazyTensor(LazyTensor):
         inner_index = torch.arange(0, self.left_lazy_tensor.size(-1), device=self.device)
         inner_index = _pad_with_singletons(inner_index, row_index.dim() - 1, 0)
 
-        left_tensor = self.left_lazy_tensor._get_indices(row_index, inner_index, *batch_indices)
-        right_tensor = self.right_lazy_tensor._get_indices(inner_index, col_index, *batch_indices)
+        left_tensor = self.left_lazy_tensor._get_indices(
+            row_index, inner_index, *batch_indices[-len(self.left_lazy_tensor.batch_shape) :]
+        )
+        right_tensor = self.right_lazy_tensor._get_indices(
+            inner_index, col_index, *batch_indices[-len(self.right_lazy_tensor.batch_shape) :]
+        )
         res = (left_tensor * right_tensor).sum(-1)
         return res
 
@@ -75,6 +86,9 @@ class MatmulLazyTensor(LazyTensor):
         left_grad = (left_grad,) if not isinstance(left_grad, tuple) else left_grad
         right_grad = (right_grad,) if not isinstance(right_grad, tuple) else right_grad
         return left_grad + right_grad
+
+    def _permute_batch(self, *dims):
+        return self.__class__(self.left_lazy_tensor._permute_batch(*dims), self.right_lazy_tensor._permute_batch(*dims))
 
     def _size(self):
         return _matmul_broadcast_shape(self.left_lazy_tensor.shape, self.right_lazy_tensor.shape)
