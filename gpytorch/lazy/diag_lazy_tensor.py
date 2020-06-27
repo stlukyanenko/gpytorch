@@ -122,7 +122,6 @@ class DiagLazyTensor(TriangularLazyTensor):
         return res
 
     def inv_quad_logdet(self, inv_quad_rhs=None, logdet=False, reduce_inv_quad=True):
-
         # TODO: Use proper batching for inv_quad_rhs (prepand to shape rathern than append)
         if inv_quad_rhs is None:
             rhs_batch_shape = torch.Size()
@@ -165,6 +164,16 @@ class DiagLazyTensor(TriangularLazyTensor):
 
     def sqrt(self):
         return DiagLazyTensor(self._diag.sqrt())
+
+    def sqrt_inv_matmul(self, rhs, lhs=None):
+        if lhs is None:
+            return DiagLazyTensor(1.0 / (self._diag.sqrt())).matmul(rhs)
+        else:
+            matrix_inv_root = DiagLazyTensor(1.0 / (self._diag.sqrt()))
+            sqrt_inv_matmul = lhs @ DiagLazyTensor(1.0 / (self._diag.sqrt())).matmul(rhs)
+            inv_quad = (matrix_inv_root @ lhs.transpose(-2, -1)).transpose(-2, -1).pow(2).sum(dim=-1)
+
+            return sqrt_inv_matmul, inv_quad
 
     def zero_mean_mvn_samples(self, num_samples):
         base_samples = torch.randn(num_samples, *self._diag.shape, dtype=self.dtype, device=self.device)
