@@ -7,6 +7,7 @@ import torch
 
 from ..utils.broadcasting import _matmul_broadcast_shape
 from ..utils.memoize import cached
+from .diag_lazy_tensor import DiagLazyTensor
 from .lazy_tensor import LazyTensor
 from .non_lazy_tensor import lazify
 
@@ -109,6 +110,22 @@ class KroneckerProductLazyTensor(LazyTensor):
         left_size = _prod(lazy_tensor.size(-2) for lazy_tensor in self.lazy_tensors)
         right_size = _prod(lazy_tensor.size(-1) for lazy_tensor in self.lazy_tensors)
         return torch.Size((*self.lazy_tensors[0].batch_shape, left_size, right_size))
+
+    @cached(name="svd")
+    def _svd(self):
+        raise NotImplementedError("TODO!")
+
+    @cached(name="symeig")
+    def _symeig(self, eigenvectors=False):
+        evals, evecs = [], []
+        for lt in self.lazy_tensors:
+            evals_, evecs_ = lt.symeig()
+            evals.append(evals_)
+            evecs.append(evecs_)
+        # TODO: Properly deal with eigenvectors=False case
+        evals = KroneckerProductLazyTensor(*[DiagLazyTensor(evals_) for evals_ in evals])
+        evecs = KroneckerProductLazyTensor(*[lazify(evecs_) for evecs_ in evecs])
+        return evals, evecs
 
     def _transpose_nonbatch(self):
         return self.__class__(*(lazy_tensor._transpose_nonbatch() for lazy_tensor in self.lazy_tensors), **self._kwargs)
