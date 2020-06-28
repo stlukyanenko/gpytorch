@@ -4,16 +4,14 @@ import warnings
 
 import torch
 
+from .. import settings
 from ..distributions import MultivariateNormal
 from ..lazy import DiagLazyTensor, MatmulLazyTensor, RootLazyTensor, SumLazyTensor, delazify
 from ..settings import trace_mode
 from ..utils.cholesky import psd_safe_cholesky
 from ..utils.memoize import cached
+from ..utils.warnings import OldVersionWarning
 from ._variational_strategy import _VariationalStrategy
-
-
-class OldVersionWarning(RuntimeWarning):
-    pass
 
 
 def _ensure_updated_strategy_flag_set(
@@ -53,9 +51,10 @@ class VariationalStrategy(_VariationalStrategy):
         points to use for variational inference.
     :param ~gpytorch.variational.VariationalDistribution variational_distribution: A
         VariationalDistribution object that represents the form of the variational distribution :math:`q(\mathbf u)`
-    :param bool learn_inducing_points: (optional, default True): Whether or not
+    :param learn_inducing_locations: (Default True): Whether or not
         the inducing point locations :math:`\mathbf Z` should be learned (i.e. are they
         parameters of the model).
+    :type learn_inducing_locations: `bool`, optional
 
     .. _Hensman et al. (2015):
         http://proceedings.mlr.press/v38/hensman15.pdf
@@ -70,7 +69,7 @@ class VariationalStrategy(_VariationalStrategy):
 
     @cached(name="cholesky_factor")
     def _cholesky_factor(self, induc_induc_covar):
-        L = psd_safe_cholesky(delazify(induc_induc_covar).double())
+        L = psd_safe_cholesky(delazify(induc_induc_covar).double(), jitter=settings.cholesky_jitter.value())
         return L
 
     @property

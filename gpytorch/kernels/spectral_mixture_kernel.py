@@ -158,6 +158,11 @@ class SpectralMixtureKernel(Kernel):
         from scipy.fftpack import fft
         from scipy.integrate import cumtrapz
 
+        if not torch.is_tensor(train_x) or not torch.is_tensor(train_y):
+            raise RuntimeError("train_x and train_y should be tensors")
+        if train_x.ndimension() == 1:
+            train_x = train_x.unsqueeze(-1)
+
         N = train_x.size(-2)
         emp_spect = np.abs(fft(train_y.cpu().detach().numpy())) ** 2 / N
         M = math.floor(N / 2)
@@ -203,7 +208,7 @@ class SpectralMixtureKernel(Kernel):
         min_dist_sort = (train_x_sort[:, 1:, :] - train_x_sort[:, :-1, :]).squeeze(0)
         min_dist = torch.zeros(1, self.ard_num_dims, dtype=train_x.dtype, device=train_x.device)
         for ind in range(self.ard_num_dims):
-            min_dist[:, ind] = min_dist_sort[(torch.nonzero(min_dist_sort[:, ind]))[0], ind]
+            min_dist[:, ind] = min_dist_sort[((min_dist_sort[:, ind]).nonzero())[0], ind]
 
         # Inverse of lengthscales should be drawn from truncated Gaussian | N(0, max_dist^2) |
         self.raw_mixture_scales.data.normal_().mul_(max_dist).abs_().pow_(-1)

@@ -5,21 +5,23 @@ In GPyTorch, Exact GP inference is still our preferred approach to large regress
 By coupling GPU acceleration with `BlackBox Matrix-Matrix Inference`_ and `LancZos Variance Estimates (LOVE)`_,
 GPyTorch can perform inference on datasets with over 1,000,000 data points while making very few approximations.
 
-How GPyTorch Scales Exact GPs
---------------------------------
+BlackBox Matrix-Matrix Inference (BBMM)
+-----------------------------------------
 
-GPyTorch relies on two key techniques to scale exact GPs to millions of data points using GPU acceleration.
+`BlackBox Matrix-Matrix Inference`_ (introduced by Gardner et al., 2018) computes the GP marginal log likelihood using only matrix multiplication.
+It is stochastic, but can scale exact GPs to millions of data points.
 
-- `BlackBox Matrix-Matrix Inference`_ (introduced by Gardner et al., 2018) computes the GP marginal log likelihood using only matrix multiplication.
-  It is stochastic, but can scale exact GPs to millions of data points.
-- `GP Regression (CUDA) with Fast Variances (LOVE)`_ demonstrates `LanczOs Variance Estimates (LOVE)`_ , a technique to rapidly speed up predictive variance computations.
-  Check out this notebook to see how to use LOVE in GPyTorch, and how it compares to standard variance computations.
+LancZos Variance Estimates (LOVE)
+----------------------------------
+
+`LanczOs Variance Estimates (LOVE)`_ (introduced by Pleiss et al., 2019) is a technique to rapidly speed up predictive variances and posterior sampling.
+Check out the `GP Regression with Fast Variances and Sampling (LOVE)`_ notebook to see how to use LOVE in GPyTorch, and how it compares to standard variance computations.
 
 .. toctree::
    :maxdepth: 1
    :hidden:
 
-   Simple_GP_Regression_With_LOVE_Fast_Variances_CUDA.ipynb
+   Simple_GP_Regression_With_LOVE_Fast_Variances_and_Sampling.ipynb
 
 Exact GPs with GPU Acceleration
 -----------------------------------
@@ -38,6 +40,19 @@ Here are examples of Exact GPs using GPU acceleration.
    Simple_GP_Regression_CUDA.ipynb
    Simple_MultiGPU_GP_Regression.ipynb
    KeOps_GP_Regression.ipynb
+
+Scalable Posterior Sampling with CIQ
+---------------------------------------
+
+Here we provide a notebook demonstrating the use of Contour Integral Quadrature with msMINRES as described in the `CIQ paper`_.
+For the most dramatic results, we recommend combining this technique with other techniques in this section like kernel checkpointing with KeOps,
+which would allow for posterior sampling on up to hundreds of thousands of test examples.
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   Exact_GP_Posterior_Sampling_with_CIQ.ipynb
 
 Scalable Kernel Approximations
 -----------------------------------
@@ -74,8 +89,8 @@ See the `Grid Regression`_ example for more info.
 .. _BlackBox Matrix-Matrix Inference:
   https://arxiv.org/abs/1809.11165
 
-.. _GP Regression (CUDA) with Fast Variances (LOVE):
-  ./Simple_GP_Regression_With_LOVE_Fast_Variances_CUDA.ipynb
+.. _GP Regression with Fast Variances and Sampling (LOVE):
+  ./Simple_GP_Regression_With_LOVE_Fast_Variances_and_Sampling.ipynb
 
 .. _LancZos Variance Estimates (LOVE):
   https://arxiv.org/pdf/1803.06058.pdf
@@ -100,3 +115,6 @@ See the `Grid Regression`_ example for more info.
 
 .. _Grid Regression:
   ./Grid_GP_Regression.ipynb
+
+.. _CIQ paper:
+  https://arxiv.org/abs/2006.11267

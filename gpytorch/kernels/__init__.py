@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 from . import keops
 from .additive_structure_kernel import AdditiveStructureKernel
+from .arc_kernel import ArcKernel
 from .cosine_kernel import CosineKernel
 from .cylindrical_kernel import CylindricalKernel
+from .distributional_input_kernel import DistributionalInputKernel
+from .gaussian_symmetrized_kl_kernel import GaussianSymmetrizedKLKernel
 from .grid_interpolation_kernel import GridInterpolationKernel
 from .grid_kernel import GridKernel
 from .index_kernel import IndexKernel
@@ -20,6 +23,7 @@ from .polynomial_kernel_grad import PolynomialKernelGrad
 from .product_structure_kernel import ProductStructureKernel
 from .rbf_kernel import RBFKernel
 from .rbf_kernel_grad import RBFKernelGrad
+from .rff_kernel import RFFKernel
 from .rq_kernel import RQKernel
 from .scale_kernel import ScaleKernel
 from .spectral_mixture_kernel import SpectralMixtureKernel
@@ -27,11 +31,14 @@ from .spectral_mixture_kernel import SpectralMixtureKernel
 __all__ = [
     "keops",
     "Kernel",
+    "ArcKernel",
     "AdditiveKernel",
     "AdditiveStructureKernel",
     "CylindricalKernel",
     "MultiDeviceKernel",
     "CosineKernel",
+    "DistributionalInputKernel",
+    "GaussianSymmetrizedKLKernel",
     "GridKernel",
     "GridInterpolationKernel",
     "IndexKernel",
@@ -47,6 +54,7 @@ __all__ = [
     "ProductKernel",
     "ProductStructureKernel",
     "RBFKernel",
+    "RFFKernel",
     "RBFKernelGrad",
     "RQKernel",
     "ScaleKernel",

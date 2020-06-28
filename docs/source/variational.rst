@@ -56,10 +56,10 @@ deterministic relationship between :math:`\mathbf f` and :math:`\mathbf u`.
    :members:
 
 
-:hidden:`MultitaskVariationalStrategy`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+:hidden:`BatchDecoupledVariationalStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: MultitaskVariationalStrategy
+.. autoclass:: BatchDecoupledVariationalStrategy
    :members:
 
 
@@ -81,6 +81,27 @@ deterministic relationship between :math:`\mathbf f` and :math:`\mathbf u`.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: GridInterpolationVariationalStrategy
+   :members:
+
+
+Variational Strategies for Multi-Output Functions
+---------------------------------------------------
+
+These are special :obj:`~gpytorch.variational._VariationalStrategy` objects that return
+:obj:`~gpytorch.distributions.MultitaskMultivariateNormal` distributions. Each of these objects
+acts on a batch of approximate GPs.
+
+
+:hidden:`IndependentMultitaskVariationalStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: IndependentMultitaskVariationalStrategy
+   :members:
+
+:hidden:`LMCVariationalStrategy`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: LMCVariationalStrategy
    :members:
 
 

@@ -15,18 +15,19 @@ from ..functions._inv_quad import InvQuad
 from ..functions._inv_quad_log_det import InvQuadLogDet
 from ..functions._matmul import Matmul
 from ..functions._root_decomposition import RootDecomposition
+from ..functions._sqrt_inv_matmul import SqrtInvMatmul
 from ..utils.broadcasting import _matmul_broadcast_shape, _mul_broadcast_shape
 from ..utils.cholesky import psd_safe_cholesky
 from ..utils.deprecation import _deprecate_renamed_methods
-from ..utils.getitem import _compute_getitem_size, _convert_indices_to_tensors, _noop_index
-from ..utils.gradients import _ensure_symmetric_grad
+from ..utils.getitem import _compute_getitem_size, _convert_indices_to_tensors, _is_noop_index, _noop_index
 from ..utils.memoize import add_to_cache, cached
 from ..utils.pivoted_cholesky import pivoted_cholesky
+from ..utils.warnings import NumericalWarning
 from .lazy_tensor_representation_tree import LazyTensorRepresentationTree
 
 
 class LazyTensor(ABC):
-    """
+    r"""
     Base class for LazyTensors in GPyTorch.
 
     In GPyTorch, nearly all covariance matrices for Gaussian processes are handled internally as some variety of
@@ -34,10 +35,10 @@ class LazyTensor(ABC):
     typically differs in two ways:
 
     #. A tensor represented by a LazyTensor can typically be represented more efficiently than storing a full matrix.
-       For example, a LazyTensor representing :math:`K=XX^{\\top}` where :math:`K` is :math:`n \\times n` but
-       :math:`X` is :math:`n \\times d` might store :math:`X` instead of :math:`K` directly.
+       For example, a LazyTensor representing :math:`K=XX^{\top}` where :math:`K` is :math:`n \times n` but
+       :math:`X` is :math:`n \times d` might store :math:`X` instead of :math:`K` directly.
     #. A LazyTensor typically defines a matmul routine that performs :math:`KM` that is more efficient than storing
-       the full matrix. Using the above example, performing :math:`KM=X(X^{\\top}M)` requires only :math:`O(nd)` time,
+       the full matrix. Using the above example, performing :math:`KM=X(X^{\top}M)` requires only :math:`O(nd)` time,
        rather than the :math:`O(n^2)` time required if we were storing :math:`K` directly.
 
     In order to define a new LazyTensor class that can be used as a covariance matrix in GPyTorch, a user must define
@@ -76,7 +77,7 @@ class LazyTensor(ABC):
 
     .. note::
         LazyTensors are designed by default to optionally represent batches of matrices. Thus, the size of a
-        LazyTensor may be (for example) :math:`b \\times n \\times n`. Many of the methods are designed to efficiently
+        LazyTensor may be (for example) :math:`b \times n \times n`. Many of the methods are designed to efficiently
         operate on these batches if present.
     """
 
@@ -215,7 +216,7 @@ class LazyTensor(ABC):
             `LazyTensor`
         """
         # Special case: if both row and col are not indexed, then we are done
-        if row_index is _noop_index and col_index is _noop_index:
+        if _is_noop_index(row_index) and _is_noop_index(col_index):
             if len(batch_indices):
                 components = [component[batch_indices] for component in self._args]
                 res = self.__class__(*components, **self._kwargs)
@@ -412,13 +413,8 @@ class LazyTensor(ABC):
         if evaluated_mat.size(-1) == 1:
             return NonLazyTensor(evaluated_mat.clamp_min(0.0).sqrt())
 
-        # NOTE: this hack is in place so that the gradient of the Cholesky factorization is symmetric
-        # We can remove this hack once https://github.com/pytorch/pytorch/issues/18825 is merged in
-        if evaluated_mat.requires_grad:
-            evaluated_mat.register_hook(_ensure_symmetric_grad)
-
         # contiguous call is necessary here
-        cholesky = psd_safe_cholesky(evaluated_mat).contiguous()
+        cholesky = psd_safe_cholesky(evaluated_mat, jitter=settings.cholesky_jitter.value()).contiguous()
         return NonLazyTensor(cholesky)
 
     def _cholesky_solve(self, rhs):
@@ -673,8 +669,8 @@ class LazyTensor(ABC):
         return SumBatchLazyTensor(self, block_dim=dim)
 
     def _t_matmul(self, rhs):
-        """
-        Performs a transpose matrix multiplication :math:`K^{\\top}M` with the matrix :math:`K` that this
+        r"""
+        Performs a transpose matrix multiplication :math:`K^{\top}M` with the matrix :math:`K` that this
         LazyTensor represents.
 
         Args:
@@ -825,11 +821,11 @@ class LazyTensor(ABC):
         return self
 
     def diag(self):
-        """
+        r"""
         As :func:`torch.diag`, returns the diagonal of the matrix :math:`K` this LazyTensor represents as a vector.
 
-        Returns:
-            :obj:`torch.tensor`: The diagonal of :math:`K`. If :math:`K` is :math:`n \times n`, this will be a length
+        :rtype: torch.tensor
+        :return: The diagonal of :math:`K`. If :math:`K` is :math:`n \times n`, this will be a length
             n vector. If this LazyTensor represents a batch (e.g., is :math:`b \times n \times n`), this will be a
             :math:`b \times n` matrix of diagonals, one for each matrix in the batch.
         """
@@ -845,6 +841,24 @@ class LazyTensor(ABC):
         Alias of :meth:`~gpytorch.lazy.LazyTensor.ndimension`
         """
         return self.ndimension()
+
+    def double(self, device_id=None):
+        """
+        This method operates identically to :func:`torch.Tensor.double`.
+        """
+        new_args = []
+        new_kwargs = {}
+        for arg in self._args:
+            if hasattr(arg, "double"):
+                new_args.append(arg.double())
+            else:
+                new_args.append(arg)
+        for name, val in self._kwargs.items():
+            if hasattr(val, "double"):
+                new_kwargs[name] = val.double()
+            else:
+                new_kwargs[name] = val
+        return self.__class__(*new_args, **new_kwargs)
 
     @property
     def dtype(self):
@@ -892,7 +906,7 @@ class LazyTensor(ABC):
         return self.representation_tree()(*self.representation())
 
     def inv_matmul(self, right_tensor, left_tensor=None):
-        """
+        r"""
         Computes a linear solve (w.r.t self = :math:`A`) with several right hand sides :math:`R`.
         I.e. computes
 
@@ -1337,7 +1351,10 @@ class LazyTensor(ABC):
                 res = self.cholesky()
                 return CholLazyTensor(res)
             except RuntimeError as e:
-                warnings.warn(f"Runtime Error when computing Cholesky decomposition: {e}. Using eigendecomposition.")
+                warnings.warn(
+                    f"Runtime Error when computing Cholesky decomposition: {e}. Using eigendecomposition.",
+                    NumericalWarning,
+                )
                 method = "symeig"
 
         if method == "pivoted_cholesky":
@@ -1387,7 +1404,8 @@ class LazyTensor(ABC):
                 return RootLazyTensor(res)
             except RuntimeError as e:
                 warnings.warn(
-                    "Runtime Error when computing Cholesky decomposition: {}. Using RootDecomposition.".format(e)
+                    "Runtime Error when computing Cholesky decomposition: {}. Using RootDecomposition.".format(e),
+                    NumericalWarning,
                 )
 
         if not self.is_square:
@@ -1471,6 +1489,26 @@ class LazyTensor(ABC):
     @property
     def shape(self):
         return self.size()
+
+    def sqrt_inv_matmul(self, rhs, lhs=None):
+        """
+        If A is positive definite, computes either lhs A^{-1/2} rhs or A^{-1/2} rhs.
+        """
+        squeeze = False
+        if rhs.dim() == 1:
+            rhs = rhs.unsqueeze(-1)
+            squeeze = True
+
+        func = SqrtInvMatmul()
+        sqrt_inv_matmul_res, inv_quad_res = func.apply(self.representation_tree(), rhs, lhs, *self.representation())
+
+        if squeeze:
+            sqrt_inv_matmul_res = sqrt_inv_matmul_res.squeeze(-1)
+
+        if lhs is None:
+            return sqrt_inv_matmul_res
+        else:
+            return sqrt_inv_matmul_res, inv_quad_res
 
     def sum(self, dim=None):
         """
@@ -1643,15 +1681,33 @@ class LazyTensor(ABC):
             :obj:`torch.tensor`:
                 Samples from MVN (num_samples x batch_size x num_dim) or (num_samples x num_dim)
         """
-        if self.size()[-2:] == torch.Size([1, 1]):
-            covar_root = self.evaluate().sqrt()
-        else:
-            covar_root = self.root_decomposition().root
+        from ..utils.contour_integral_quad import contour_integral_quad
 
-        base_samples = torch.randn(
-            *self.batch_shape, covar_root.size(-1), num_samples, dtype=self.dtype, device=self.device
-        )
-        samples = covar_root.matmul(base_samples).permute(-1, *range(self.dim() - 1)).contiguous()
+        if settings.ciq_samples.on():
+            base_samples = torch.randn(
+                *self.batch_shape, self.size(-1), num_samples, dtype=self.dtype, device=self.device
+            )
+            base_samples = base_samples.permute(-1, *range(self.dim() - 1)).contiguous()
+            base_samples = base_samples.unsqueeze(-1)
+            solves, weights, _, _ = contour_integral_quad(
+                self.evaluate_kernel(),
+                base_samples,
+                inverse=False,
+                num_contour_quadrature=settings.num_contour_quadrature.value(),
+            )
+
+            return (solves * weights).sum(0).squeeze(-1)
+
+        else:
+            if self.size()[-2:] == torch.Size([1, 1]):
+                covar_root = self.evaluate().sqrt()
+            else:
+                covar_root = self.root_decomposition().root
+
+            base_samples = torch.randn(
+                *self.batch_shape, covar_root.size(-1), num_samples, dtype=self.dtype, device=self.device
+            )
+            samples = covar_root.matmul(base_samples).permute(-1, *range(self.dim() - 1)).contiguous()
 
         return samples
 
@@ -1682,7 +1738,9 @@ class LazyTensor(ABC):
         elif isinstance(other, Tensor):
             other = lazify(other)
             shape = _mul_broadcast_shape(self.shape, other.shape)
-            return SumLazyTensor(self.expand(shape), other.expand(shape))
+            new_self = self if self.shape == shape else self._expand_batch(shape[:-2])
+            new_other = other if other.shape == shape else other._expand_batch(shape[:-2])
+            return SumLazyTensor(new_self, new_other)
         else:
             return SumLazyTensor(self, other)
 

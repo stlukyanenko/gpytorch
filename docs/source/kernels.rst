@@ -71,6 +71,12 @@ Standard Kernels
 .. autoclass:: RBFKernel
    :members:
 
+:hidden:`RQKernel`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: RQKernel
+   :members:
+
 :hidden:`SpectralMixtureKernel`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -87,15 +93,14 @@ Composition/Decoration Kernels
 .. autoclass:: AdditiveKernel
    :members:
 
-:hidden:`AdditiveStructureKernel`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 :hidden:`MultiDeviceKernel`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: MultiDeviceKernel
    :members:
 
+:hidden:`AdditiveStructureKernel`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: AdditiveStructureKernel
    :members:
@@ -122,6 +127,12 @@ Composition/Decoration Kernels
 
 Specialty Kernels
 -----------------------------------
+
+:hidden:`ArcKernel`
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: ArcKernel
+   :members:
 
 :hidden:`IndexKernel`
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -167,4 +178,10 @@ Kernels for Scalable GP Regression Methods
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: InducingPointKernel
+   :members:
+
+:hidden:`RFFKernel`
+~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: RFFKernel
    :members:

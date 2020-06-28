@@ -89,16 +89,13 @@ class LazyEvaluatedKernelTensor(LazyTensor):
         # We're going to handle multi-batch indexing with a try-catch loop
         # This way - in the default case, we can avoid doing expansions of x1 which can be timely
         except IndexError:
-            if isinstance(batch_indices, slice):
-                x1 = x1.expand(1, *self.x1.shape[-2:])[(*batch_indices, row_index, dim_index)]
-            elif isinstance(batch_indices, tuple):
-                if any(not isinstance(bi, slice) for bi in batch_indices):
-                    raise RuntimeError(
-                        f"Attempting to tensor index a non-batch matrix's batch dimensions. "
-                        "Got batch index {batch_indices} but my shape was {self.shape}"
-                    )
-                x1 = x1.expand(*([1] * len(batch_indices)), *self.x1.shape[-2:])
-                x1 = x1[(*batch_indices, row_index, dim_index)]
+            if any(not isinstance(bi, slice) for bi in batch_indices):
+                raise RuntimeError(
+                    f"Attempting to tensor index a non-batch matrix's batch dimensions. "
+                    "Got batch index {batch_indices} but my shape was {self.shape}"
+                )
+            x1 = x1.expand(*([1] * (len(batch_indices) - self.x1.dim() + 2)), *self.x1.shape)
+            x1 = x1[(*batch_indices, row_index, dim_index)]
 
         # Call x2[*batch_indices, col_index, :]
         try:
@@ -106,16 +103,13 @@ class LazyEvaluatedKernelTensor(LazyTensor):
         # We're going to handle multi-batch indexing with a try-catch loop
         # This way - in the default case, we can avoid doing expansions of x1 which can be timely
         except IndexError:
-            if isinstance(batch_indices, slice):
-                x2 = x2.expand(1, *self.x2.shape[-2:])[(*batch_indices, col_index, dim_index)]
-            elif isinstance(batch_indices, tuple):
-                if any([not isinstance(bi, slice) for bi in batch_indices]):
-                    raise RuntimeError(
-                        f"Attempting to tensor index a non-batch matrix's batch dimensions. "
-                        "Got batch index {batch_indices} but my shape was {self.shape}"
-                    )
-                x2 = x2.expand(*([1] * len(batch_indices)), *self.x2.shape[-2:])
-                x2 = x2[(*batch_indices, col_index, dim_index)]
+            if any([not isinstance(bi, slice) for bi in batch_indices]):
+                raise RuntimeError(
+                    f"Attempting to tensor index a non-batch matrix's batch dimensions. "
+                    "Got batch index {batch_indices} but my shape was {self.shape}"
+                )
+            x2 = x2.expand(*([1] * (len(batch_indices) - self.x1.dim() + 2)), *self.x2.shape)
+            x2 = x2[(*batch_indices, col_index, dim_index)]
 
         if len(batch_indices) == 0 or all(ind == slice(None, None, None) for ind in batch_indices):
             new_kernel = self.kernel  # Avoid unnecessary copying when we aren't explicitly indexing batch dims
@@ -162,14 +156,15 @@ class LazyEvaluatedKernelTensor(LazyTensor):
                 "checkpointing. This is probably a bug in GPyTorch."
             )
 
-        x1 = self.x1.detach()
-        x2 = self.x2.detach()
+        x1 = self.x1.detach().requires_grad_(True)
+        x2 = self.x2.detach().requires_grad_(True)
 
         # Break objects into chunks
         sub_x1s = torch.split(x1, split_size, dim=-2)
         sub_left_vecss = torch.split(left_vecs, split_size, dim=-2)
         # Compute the gradient in chunks
         for sub_x1, sub_left_vecs in zip(sub_x1s, sub_left_vecss):
+            sub_x1.detach_().requires_grad_(True)
             with torch.enable_grad(), settings.lazily_evaluate_kernels(False):
                 sub_kernel_matrix = lazify(
                     self.kernel(sub_x1, x2, diag=False, last_dim_is_batch=self.last_dim_is_batch, **self.params)
@@ -178,6 +173,7 @@ class LazyEvaluatedKernelTensor(LazyTensor):
             sub_kernel_outputs = tuple(sub_kernel_matrix.representation())
             torch.autograd.backward(sub_kernel_outputs, sub_grad_outputs)
 
+        x1.grad = torch.cat([sub_x1.grad.data for sub_x1 in sub_x1s], dim=-2)
         return x1.grad, x2.grad
 
     @cached(name="size")

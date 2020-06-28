@@ -8,6 +8,7 @@ import torch
 from .. import settings
 from ..lazy import (
     BatchRepeatLazyTensor,
+    ConstantMulLazyTensor,
     InterpolatedLazyTensor,
     LazyEvaluatedKernelTensor,
     MatmulLazyTensor,
@@ -87,9 +88,9 @@ class DefaultPredictionStrategy(object):
         return res
 
     def _exact_predictive_covar_inv_quad_form_root(self, precomputed_cache, test_train_covar):
-        """
+        r"""
         Computes :math:`K_{X^{*}X} S` given a precomputed cache
-        Where :math:`S` is a tensor such that :math:`SS^{\\top} = (K_{XX} + \sigma^2 I)^{-1}`
+        Where :math:`S` is a tensor such that :math:`SS^{\top} = (K_{XX} + \sigma^2 I)^{-1}`
 
         Args:
             precomputed_cache (:obj:`torch.tensor`): What was computed in _exact_predictive_covar_inv_quad_form_cache
@@ -144,16 +145,16 @@ class DefaultPredictionStrategy(object):
         self.fantasy_inputs = inputs
         self.fantasy_targets = targets
 
-        """
+        r"""
         Compute a new mean cache given the old mean cache.
 
-        We have \\alpha = K^{-1}y, and we want to solve [K U; U' S][a; b] = [y; y_f], where U' is fant_train_covar,
+        We have \alpha = K^{-1}y, and we want to solve [K U; U' S][a; b] = [y; y_f], where U' is fant_train_covar,
         S is fant_fant_covar, and y_f is (targets - fant_mean)
 
         To do this, we solve the bordered linear system of equations for [a; b]:
             AQ = U  # Q = fant_solve
-            [S - U'Q]b = y_f - U'\\alpha   ==> b = [S - U'Q]^{-1}(y_f - U'\\alpha)
-            a = \\alpha - Qb
+            [S - U'Q]b = y_f - U'\alpha   ==> b = [S - U'Q]^{-1}(y_f - U'\alpha)
+            a = \alpha - Qb
         """
         # Get cached K inverse decomp. (or compute if we somehow don't already have the covariance cache)
         K_inverse = self.lik_train_train_covar.root_inv_decomposition()
@@ -171,7 +172,8 @@ class DefaultPredictionStrategy(object):
         small_system_rhs = targets - fant_mean - ftcm
         small_system_rhs = small_system_rhs.unsqueeze(-1)
         # Schur complement of a spd matrix is guaranteed to be positive definite
-        fant_cache_lower = torch.cholesky_solve(small_system_rhs, psd_safe_cholesky(schur_complement))
+        schur_cholesky = psd_safe_cholesky(schur_complement, jitter=settings.cholesky_jitter.value())
+        fant_cache_lower = torch.cholesky_solve(small_system_rhs, schur_cholesky)
 
         # Get "a", the new upper portion of the cache corresponding to the old training points.
         fant_cache_upper = self.mean_cache.unsqueeze(-1) - fant_solve.matmul(fant_cache_lower)
@@ -206,7 +208,8 @@ class DefaultPredictionStrategy(object):
         m, n = L.shape[-2:]
 
         lower_left = fant_train_covar.matmul(L_inverse)
-        schur_root = psd_safe_cholesky(fant_fant_covar - lower_left.matmul(lower_left.transpose(-2, -1)))
+        schur = fant_fant_covar - lower_left.matmul(lower_left.transpose(-2, -1))
+        schur_root = psd_safe_cholesky(schur, jitter=settings.cholesky_jitter.value())
 
         # Form new root Z = [L 0; lower_left schur_root]
         num_fant = schur_root.size(-2)
@@ -356,7 +359,9 @@ class DefaultPredictionStrategy(object):
             if torch.is_tensor(test_test_covar):
                 # We can use addmm in the 2d case
                 if test_test_covar.dim() == 2:
-                    return lazify(torch.addmm(1, test_test_covar, -1, test_train_covar, covar_correction_rhs))
+                    return lazify(
+                        torch.addmm(test_test_covar, test_train_covar, covar_correction_rhs, beta=1, alpha=-1)
+                    )
                 else:
                     return lazify(test_test_covar + test_train_covar @ covar_correction_rhs.mul(-1))
             # In other cases - we'll use the standard infrastructure
@@ -367,7 +372,9 @@ class DefaultPredictionStrategy(object):
         covar_inv_quad_form_root = self._exact_predictive_covar_inv_quad_form_root(precomputed_cache, test_train_covar)
         if torch.is_tensor(test_test_covar):
             return lazify(
-                torch.add(test_test_covar, -1, covar_inv_quad_form_root @ covar_inv_quad_form_root.transpose(-1, -2))
+                torch.add(
+                    test_test_covar, covar_inv_quad_form_root @ covar_inv_quad_form_root.transpose(-1, -2), alpha=-1
+                )
             )
         else:
             return test_test_covar + MatmulLazyTensor(
@@ -557,7 +564,7 @@ class SumPredictionStrategy(DefaultPredictionStrategy):
         return sub_strategies
 
     def _exact_predictive_covar_inv_quad_form_cache(self, train_train_covar_inv_root, test_train_covar):
-        test_train_covar = test_train_covar.evaluate_kernel()
+        test_train_covar = lazify(test_train_covar).evaluate_kernel()
         if not isinstance(test_train_covar, SumLazyTensor):
             return super(SumPredictionStrategy, self)._exact_predictive_covar_inv_quad_form_cache(
                 train_train_covar_inv_root, test_train_covar
@@ -571,7 +578,7 @@ class SumPredictionStrategy(DefaultPredictionStrategy):
     def _exact_predictive_covar_inv_quad_form_root(self, precomputed_cache, test_train_covar):
         # Here the precomputed cache is a list
         # where each component in the list is the precomputed cache for each component lazy tensor
-        test_train_covar = test_train_covar.evaluate_kernel()
+        test_train_covar = lazify(test_train_covar).evaluate_kernel()
         if not isinstance(test_train_covar, SumLazyTensor):
             return super(SumPredictionStrategy, self)._exact_predictive_covar_inv_quad_form_root(
                 precomputed_cache, test_train_covar
@@ -583,3 +590,55 @@ class SumPredictionStrategy(DefaultPredictionStrategy):
                     self._sub_strategies, precomputed_cache, test_train_covar.evaluate_kernel().lazy_tensors
                 )
             )
+
+
+class RFFPredictionStrategy(DefaultPredictionStrategy):
+    def __init__(self, train_inputs, train_prior_dist, train_labels, likelihood):
+        super().__init__(train_inputs, train_prior_dist, train_labels, likelihood)
+        self.train_prior_dist = self.train_prior_dist.__class__(
+            self.train_prior_dist.mean, self.train_prior_dist.lazy_covariance_matrix.evaluate_kernel()
+        )
+
+    def get_fantasy_strategy(self, inputs, targets, full_inputs, full_targets, full_output, **kwargs):
+        raise NotImplementedError("Fantasy observation updates not yet supported for models using RFFs")
+
+    @property
+    @cached(name="covar_cache")
+    def covar_cache(self):
+        lt = self.train_prior_dist.lazy_covariance_matrix
+        if isinstance(lt, ConstantMulLazyTensor):
+            constant = lt.expanded_constant
+            lt = lt.base_lazy_tensor
+        else:
+            constant = torch.tensor(1.0, dtype=lt.dtype, device=lt.device)
+
+        train_factor = lt.root.evaluate()
+        train_train_covar = self.lik_train_train_covar
+        inner_term = (
+            torch.eye(train_factor.size(-1), dtype=train_factor.dtype, device=train_factor.device)
+            - (train_factor.transpose(-1, -2) @ train_train_covar.inv_matmul(train_factor)) * constant
+        )
+        return psd_safe_cholesky(inner_term)
+
+    def exact_prediction(self, joint_mean, joint_covar):
+        # Find the components of the distribution that contain test data
+        test_mean = joint_mean[..., self.num_train :]
+        test_test_covar = joint_covar[..., self.num_train :, self.num_train :].evaluate_kernel()
+        test_train_covar = joint_covar[..., self.num_train :, : self.num_train].evaluate_kernel()
+
+        return (
+            self.exact_predictive_mean(test_mean, test_train_covar),
+            self.exact_predictive_covar(test_test_covar, test_train_covar),
+        )
+
+    def exact_predictive_covar(self, test_test_covar, test_train_covar):
+        if isinstance(test_test_covar, ConstantMulLazyTensor):
+            constant = test_test_covar.expanded_constant
+            test_test_covar = test_test_covar.base_lazy_tensor
+        else:
+            constant = torch.tensor(1.0, dtype=test_test_covar.dtype, device=test_test_covar.device)
+
+        covar_cache = self.covar_cache
+        factor = test_test_covar.root.evaluate() * constant.sqrt()
+        res = RootLazyTensor(factor @ covar_cache)
+        return res

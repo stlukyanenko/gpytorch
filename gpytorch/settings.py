@@ -338,6 +338,15 @@ class max_cg_iterations(_value_context):
     _global_value = 1000
 
 
+class cholesky_jitter(_value_context):
+    """
+    The jitter value passed to `psd_safe_cholesky` when using cholesky solves.
+    Default: None
+    """
+
+    _global_value = None
+
+
 class cg_tolerance(_value_context):
     """
     Relative residual tolerance to use for terminating CG.
@@ -346,6 +355,14 @@ class cg_tolerance(_value_context):
     """
 
     _global_value = 1
+
+
+class ciq_samples(_feature_flag):
+    """
+    Whether to draw samples using CIQ or not
+    """
+
+    _state = False
 
 
 class preconditioner_tolerance(_value_context):
@@ -405,7 +422,7 @@ class max_preconditioner_size(_value_context):
 
 
 class max_lanczos_quadrature_iterations(_value_context):
-    """
+    r"""
     The maximum number of Lanczos iterations to perform when doing stochastic
     Lanczos quadrature. This is ONLY used for log determinant calculations and
     computing Tr(K^{-1}dK/d\theta)
@@ -433,6 +450,25 @@ class min_preconditioning_size(_value_context):
     """
 
     _global_value = 2000
+
+
+class minres_tolerance(_value_context):
+    """
+    Relative update term tolerance to use for terminating MINRES.
+
+    Default: 1e-4
+    """
+
+    _global_value = 1e-4
+
+
+class num_contour_quadrature(_value_context):
+    """
+    The number of quadrature points to compute CIQ.
+    Default: 15
+    """
+
+    _global_value = 15
 
 
 class num_likelihood_samples(_value_context):
